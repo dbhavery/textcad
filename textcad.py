@@ -46,6 +46,23 @@ Hard rules:
 5. Keep dimensions realistic for a hand-held part (single-digit to ~150 mm).
 6. Do NOT call any external library (no `use <...>` / `include <...>`); only
    built-in primitives and transforms so it compiles standalone.
+7. To make a HOLE or remove material you MUST use difference() — the thing to
+   remove goes INSIDE difference() after the solid. Never just place a cylinder
+   next to the body and expect a hole; that only ADDS material.
+
+Worked example — a washer (disc with a centered through-hole), showing the
+correct difference() pattern. Follow this structure:
+---
+$fn = 64;
+outer_d = 20;   // outer diameter, mm
+inner_d = 8;    // hole diameter, mm
+thick   = 3;    // thickness, mm
+difference() {
+  cylinder(h = thick, d = outer_d, center = true);   // solid body
+  cylinder(h = thick + 1, d = inner_d, center = true); // hole: SUBTRACTED, taller so it punches through
+}
+---
+Now build the requested part with the same rigor.
 """
 
 _FIX = """\
