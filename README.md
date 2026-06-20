@@ -36,20 +36,50 @@ inherits GPL.
 ## Usage
 
 ```bash
-python textcad.py "a hexagonal nut, 10mm across flats, 5mm thick, 5mm center hole"
-python textcad.py "a coffee mug with a handle" --name mug --iters 4
+# compile-only loop (fast, accepts first valid-and-exportable part)
+python textcad.py "a hexagonal nut, 16mm across flats, 6mm thick, 8mm center hole" --model qwen2.5-coder:32b
+
+# full closed loop: add the local vision-model inspector
+python textcad.py "a hexagonal nut, 16mm across flats, 6mm thick, 8mm center hole" \
+    --model qwen2.5-coder:32b --inspect qwen2.5vl:7b --iters 4
+
+# compare codegen models on a fixed part set
+python bench.py qwen2.5-coder:32b
 ```
 
-Outputs land in `out/<name>.scad`, `out/<name>.png`, `out/<name>.stl`.
+Outputs land in `out/<name>.scad`, `out/<name>.png` (iso), `out/<name>_top.png`
+(top-down, used by the inspector), `out/<name>.stl`.
+
+## Gates (what the loop checks each iteration)
+
+1. **Compile** — OpenSCAD must render a preview; `stderr` feeds back on failure.
+2. **STL export** — must produce a non-empty STL; catches mixed 2D/3D and
+   non-manifold geometry that previews fine but won't export.
+3. **Visual inspector** (optional, `--inspect`) — a local VLM judges a **top-down
+   orthographic** render against the request and rejects valid-but-wrong shapes
+   (e.g. a round disc when a hexagon was asked for). Top-down is essential: a
+   foreshortened isometric makes a 7B VLM misread a hexagon as "rectangular".
 
 ## Requirements
 
-- OpenSCAD on PATH or in `C:/Program Files/OpenSCAD/` (`winget install OpenSCAD.OpenSCAD`)
-- Ollama running with the codegen model pulled (`ollama pull qwen3:14b`)
+- OpenSCAD — bundled portable copy in `tools/openscad-*/` (auto-detected), or installed.
+- Ollama running with:
+  - a codegen model — `ollama pull qwen2.5-coder:32b` (best tested; `qwen3:14b` weaker)
+  - a vision model for `--inspect` — `ollama pull qwen2.5vl:7b`
 - `local-llm-synthesis` skill at `C:/Users/dbhav/Projects/Skills/local-llm-synthesis`
 
-## Status
+## Status — closed loop WORKS, fully local
 
-Proof-of-concept. Demonstrates the codegen → render → compile-fix loop end to end.
-Not a product. Next steps if pursued: a local VLM inspector to automate visual
-critique, multi-view screenshots, and a parameter-slider UI over the named vars.
+Verified end-to-end: text -> qwen2.5-coder:32b writes OpenSCAD -> render iso+top ->
+compile + STL + VLM gates -> critique feeds back -> regenerate. On a hex nut the
+loop self-corrected a wrong shape on attempt 1 to an APPROVED correct part on
+attempt 2 — autonomous, no retail API.
+
+Model findings: qwen2.5-coder:32b handles single-feature parts (nut, washer) but
+is non-deterministic and still struggles with multi-feature parts (perpendicular
+legs, D-profile shafts, finger grooves). qwen2.5vl:7b is a reliable shape/feature
+judge only on top-down ortho views.
+
+Not a product. Natural next steps: multi-view inspection (front+side, not just
+top), a stronger/larger VLM for complex parts, and a parameter-slider UI over the
+named OpenSCAD vars.
