@@ -185,25 +185,37 @@ def run(description: str, *, name: str, model: str, iters: int, inspector=None) 
             print(f"[attempt {attempt}] compiled=False  error={error[:140]!r}")
             continue
 
-        # Compiled — run the visual inspector if one is wired in.
+        # Validity gate: it must also export a non-empty STL. A part that renders
+        # but won't export is usually mixed 2D/3D geometry or a non-manifold/empty
+        # solid — a real defect, so feed it back like a compile error.
+        stl_ok, stl_err = export_stl(openscad, scad, stl)
+        if not stl_ok:
+            error = ("The code rendered a preview but STL export FAILED — this usually "
+                     "means the geometry mixes 2D and 3D objects (e.g. a bare polygon()/"
+                     "circle() not wrapped in linear_extrude alongside 3D solids), or the "
+                     "result is empty/non-manifold. Make the whole model a single 3D solid. "
+                     f"Exporter said: {stl_err}")
+            history.append({"attempt": attempt, "compiled": True, "stl": False,
+                            "feedback": error[:200]})
+            print(f"[attempt {attempt}] compiled=True but STL export FAILED — feeding back")
+            continue
+
+        # Compiled and exports — run the visual inspector if one is wired in.
         if inspector is not None:
             approved, crit = inspector(png, description)
-            history.append({"attempt": attempt, "compiled": True,
+            history.append({"attempt": attempt, "compiled": True, "stl": True,
                             "approved": approved, "feedback": "" if approved else crit[:200]})
-            print(f"[attempt {attempt}] compiled=True  inspector_approved={approved}"
+            print(f"[attempt {attempt}] compiled=True stl=True  inspector_approved={approved}"
                   + ("" if approved else f"  critique={crit[:120]!r}"))
             if not approved:
                 critique = crit
                 continue
         else:
-            history.append({"attempt": attempt, "compiled": True, "approved": None})
-            print(f"[attempt {attempt}] compiled=True (no inspector — accepting)")
+            history.append({"attempt": attempt, "compiled": True, "stl": True, "approved": None})
+            print(f"[attempt {attempt}] compiled=True stl=True (no inspector — accepting)")
 
-        stl_ok, stl_err = export_stl(openscad, scad, stl)
         return {"openscad": openscad, "description": description, "scad": str(scad),
-                "png": str(png), "stl": str(stl) if stl_ok else None,
-                "stl_error": stl_err if not stl_ok else "", "attempts": attempt,
-                "history": history}
+                "png": str(png), "stl": str(stl), "attempts": attempt, "history": history}
 
     return {"openscad": openscad, "description": description, "scad": str(scad),
             "png": str(png), "stl": None, "attempts": iters, "history": history,
