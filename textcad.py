@@ -154,6 +154,17 @@ def render_png(openscad: str, scad: Path, png: Path) -> tuple[bool, str]:
     ])
 
 
+def render_top_png(openscad: str, scad: Path, png: Path) -> tuple[bool, str]:
+    """Straight top-down orthographic view. A foreshortened isometric makes small
+    vision models misread polygons (a hexagon reads as 'rectangular'); a top view
+    makes the cross-section unambiguous for the inspector. (CADAM renders several
+    orthographic views for the same reason.)"""
+    return _run_openscad(openscad, scad, png, [
+        "--projection=o", "--camera=0,0,100,0,0,0", "--viewall", "--autocenter",
+        "--imgsize=1024,768", "--colorscheme=Tomorrow", "--render",
+    ])
+
+
 def export_stl(openscad: str, scad: Path, stl: Path) -> tuple[bool, str]:
     return _run_openscad(openscad, scad, stl, ["--export-format=binstl"])
 
@@ -202,7 +213,10 @@ def run(description: str, *, name: str, model: str, iters: int, inspector=None) 
 
         # Compiled and exports — run the visual inspector if one is wired in.
         if inspector is not None:
-            approved, crit = inspector(png, description)
+            top = OUT / f"{name}_top.png"
+            tok, _ = render_top_png(openscad, scad, top)
+            view = top if tok else png  # top-down reads polygons unambiguously
+            approved, crit = inspector(view, description)
             history.append({"attempt": attempt, "compiled": True, "stl": True,
                             "approved": approved, "feedback": "" if approved else crit[:200]})
             print(f"[attempt {attempt}] compiled=True stl=True  inspector_approved={approved}"
@@ -227,10 +241,18 @@ def main() -> None:
     ap.add_argument("description", help="plain-English part description")
     ap.add_argument("--name", default="part", help="output basename (out/<name>.scad|png|stl)")
     ap.add_argument("--model", default="qwen3:14b", help="Ollama model for codegen")
-    ap.add_argument("--iters", type=int, default=3, help="max compile-fix attempts")
+    ap.add_argument("--iters", type=int, default=3, help="max generate/fix attempts")
+    ap.add_argument("--inspect", nargs="?", const="qwen2.5vl:7b", default=None,
+                    metavar="VLM_MODEL",
+                    help="enable the local vision-model inspector (default qwen2.5vl:7b)")
     args = ap.parse_args()
 
-    result = run(args.description, name=args.name, model=args.model, iters=args.iters)
+    inspector = None
+    if args.inspect:
+        from inspector import make_vlm_inspector
+        inspector = make_vlm_inspector(args.inspect)
+    result = run(args.description, name=args.name, model=args.model,
+                 iters=args.iters, inspector=inspector)
     print("\n=== RESULT ===")
     for k in ("description", "attempts", "scad", "png", "stl", "error"):
         if result.get(k) not in (None, ""):
