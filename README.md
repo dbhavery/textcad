@@ -34,6 +34,13 @@ because a foreshortened isometric makes small vision models misread a hexagon as
 "rectangular" — rejected it with _"not hexagonal; irregular polygonal shape"_. That
 critique fed back, and **attempt 2 was approved.** No human in the loop.
 
+### Multi-view inspection
+
+The vision gate judges an **orthographic contact sheet** — one labelled image, like
+an engineering drawing — so features on different faces are all legible at once:
+
+![contact sheet](examples/contact_sheet.png)
+
 ### Gallery
 
 All generated locally from a one-line description by `qwen2.5-coder:32b`:
@@ -81,9 +88,15 @@ next generation:
 1. **Compile** — OpenSCAD must render a preview; the compiler `stderr` feeds back.
 2. **STL export** — must produce a non-empty STL. Catches mixed 2D/3D and
    non-manifold geometry that previews fine but won't export.
-3. **Visual inspector** *(optional, `--inspect`)* — a local VLM judges the top-down
-   render against the request and rejects valid-but-*wrong* shapes (a round disc
-   when a hexagon was asked for) that the first two gates can't see.
+3. **Visual inspector** *(optional, `--inspect`)* — a local VLM judges the part
+   against the request and rejects valid-but-*wrong* shapes (a round disc when a
+   hexagon was asked for) that the first two gates can't see. It inspects an
+   **orthographic contact sheet** — top, front and side views composited into one
+   labelled image (like an engineering drawing). This matters: a small VLM misreads
+   a foreshortened isometric, and gets *confused* by several separate images, but
+   reads one labelled multi-panel sheet reliably — enough to catch a missing
+   perpendicular leg or a wrong cross-section. (Contact sheets need Pillow:
+   `pip install textcad[inspect]`.)
 
 ## Library API
 
@@ -106,10 +119,10 @@ unit-tested with no Ollama and no OpenSCAD — see `tests/`.
 
 ```
 textcad/
-  llm.py        minimal local-Ollama client (text + vision)
+  llm.py        minimal local-Ollama client (text + vision, multi-image)
   codegen.py    system prompt + OpenSCAD code generation
-  render.py     OpenSCAD invocation: iso/top render + STL export
-  inspector.py  local vision-model judge (top-down view)
+  render.py     OpenSCAD invocation: iso/ortho views + STL + contact sheet
+  inspector.py  local vision-model judge (orthographic contact sheet)
   loop.py       the agentic loop + the three gates
   cli.py        `textcad` command
 scripts/bench.py  fixed-part-set model comparison
@@ -120,15 +133,21 @@ tests/            mock-backed gate-logic + codegen + inspector tests
 
 - The closed loop is **verified end-to-end and fully local.** On a hex nut it
   self-corrected a wrong shape into an approved correct part in two attempts.
-- **Codegen model matters.** `qwen2.5-coder:32b` produces real regular polygons and
-  uses `difference()` natively; a smaller `qwen3:14b` makes wedges and skips
-  subtraction. Both still struggle with multi-feature parts (perpendicular legs,
-  D-profile shafts, finger grooves) and are non-deterministic.
-- **Top-down views are essential** for a small VLM judge — it misreads polygons in
-  isometric. (Larger CAD systems render several orthographic views for this reason.)
+- **Codegen model matters, and is now the bottleneck.** `qwen2.5-coder:32b` produces
+  real regular polygons and uses `difference()` natively (a smaller `qwen3:14b` makes
+  wedges and skips subtraction). It's reliable on single-feature parts but still
+  struggles to *generate* multi-feature parts (perpendicular legs, D-profile shafts,
+  grooves) even with critique feedback, and is non-deterministic.
+- **Inspection is solved for multi-feature parts** via the orthographic contact
+  sheet: where a 7B VLM failed on both a single isometric and a raw 3-image call, it
+  correctly approves a real L-bracket and rejects a flat L-plate from one labelled
+  contact sheet. The remaining gap is generation, not inspection.
+- A *larger* VLM (`qwen2.5vl:32b`) needs a newer Ollama than tested here (0.30.10
+  fails to load its vision encoder); the contact-sheet trick made the small VLM
+  sufficient, so it isn't required.
 
-Natural next steps: multi-view inspection (front + side, not just top), a larger
-VLM for complex parts, and a parameter-slider UI over the named OpenSCAD variables.
+Natural next steps: a stronger/larger codegen model (or a part-template library) for
+complex multi-feature parts, and a parameter-slider UI over the named OpenSCAD vars.
 
 ## License & provenance
 
