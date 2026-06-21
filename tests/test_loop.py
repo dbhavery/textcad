@@ -11,6 +11,7 @@ def _patch(monkeypatch, *, render, export, gen=lambda *a, **k: "cube(1);\n", vie
     monkeypatch.setattr(loop, "export_stl", export)
     monkeypatch.setattr(loop, "render_views",
                         views or (lambda o, s, base: [("top-down", base)]))
+    monkeypatch.setattr(loop, "make_contact_sheet", lambda vs, out, **k: out)
 
 
 def test_accepts_first_valid_part(monkeypatch, tmp_path):

@@ -16,10 +16,11 @@ from .llm import ollama_vision
 log = logging.getLogger("textcad.inspector")
 
 _PROMPT = """\
-You are a precise CAD reviewer. You are shown {n} orthographic render(s) of ONE part,
-in this order: {labels}. They are the same object seen from different directions —
-use whichever view best shows each feature (the top-down view shows the cross-section
-/ outline shape; the front and side views show features on the vertical faces such as
+You are a precise CAD reviewer. You are shown orthographic render(s) of ONE part —
+this may be a single CONTACT SHEET image with several labelled panels, or separate
+images ({labels}). They are the same object seen from different directions — use
+whichever view best shows each feature (the top-down view shows the cross-section /
+outline shape; the front and side views show features on the vertical faces such as
 legs, side grooves, and holes that enter from a side or the bottom).
 
 The part was generated from this request:

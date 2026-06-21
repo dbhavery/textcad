@@ -2,11 +2,13 @@
 tool (no library linkage), so nothing built on textcad inherits OpenSCAD's GPL."""
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import subprocess
 from pathlib import Path
 
+log = logging.getLogger("textcad.render")
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -94,6 +96,36 @@ def render_views(openscad: str, scad: Path, base: Path) -> list[tuple[str, Path]
         ok, _ = fn(openscad, scad, png)
         if ok:
             out.append((label, png))
+    return out
+
+
+def make_contact_sheet(views: list[tuple[str, Path]], out: Path, height: int = 360) -> Path | None:
+    """Composite labelled views side-by-side into ONE image (an orthographic
+    'contact sheet', like an engineering drawing). Small vision models judge a
+    single labelled image far more reliably than several separate images. Needs
+    Pillow (`pip install textcad[inspect]`); returns None if unavailable/empty."""
+    if not views:
+        return None
+    try:
+        from PIL import Image, ImageDraw
+    except ImportError:
+        log.warning("Pillow not installed — `pip install textcad[inspect]` for contact sheets")
+        return None
+    scaled = []
+    for label, p in views:
+        im = Image.open(p).convert("RGB")
+        w = max(1, int(im.width * height / im.height))
+        scaled.append((label, im.resize((w, height))))
+    pad, label_h = 12, 28
+    total_w = sum(im.width for _, im in scaled) + pad * (len(scaled) + 1)
+    canvas = Image.new("RGB", (total_w, height + label_h + pad), (245, 245, 245))
+    draw = ImageDraw.Draw(canvas)
+    x = pad
+    for label, im in scaled:
+        canvas.paste(im, (x, label_h))
+        draw.text((x + 4, 6), label.upper(), fill=(20, 20, 20))
+        x += im.width + pad
+    canvas.save(out)
     return out
 
 

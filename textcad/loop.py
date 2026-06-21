@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .codegen import generate_scad
-from .render import find_openscad, render_png, render_views, export_stl
+from .render import find_openscad, render_png, render_views, make_contact_sheet, export_stl
 
 
 def run(description: str, *, name: str = "part", model: str = "qwen2.5-coder:32b",
@@ -60,8 +60,12 @@ def run(description: str, *, name: str = "part", model: str = "qwen2.5-coder:32b
 
         if inspector is not None:
             views = render_views(openscad, scad, out / name)  # top + front + side
-            views = views or [("iso", png)]  # fall back to the iso preview
-            approved, crit = inspector(views, description)
+            sheet = make_contact_sheet(views, out / f"{name}_sheet.png") if views else None
+            if sheet:
+                viewset = [("orthographic contact sheet (top-down, front, right-side panels)", sheet)]
+            else:
+                viewset = views or [("iso", png)]  # Pillow missing / no views: fall back
+            approved, crit = inspector(viewset, description)
             history.append({"attempt": attempt, "compiled": True, "stl": True,
                             "approved": approved, "feedback": "" if approved else crit[:200]})
             print(f"[attempt {attempt}] compiled=True stl=True  inspector_approved={approved}"

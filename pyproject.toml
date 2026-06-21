@@ -22,7 +22,8 @@ classifiers = [
 dependencies = []  # pure stdlib; needs a running Ollama + an OpenSCAD binary
 
 [project.optional-dependencies]
-dev = ["pytest>=7"]
+inspect = ["pillow>=9"]  # contact-sheet compositing for the vision inspector
+dev = ["pytest>=7", "pillow>=9"]
 
 [project.scripts]
 textcad = "textcad.cli:main"
