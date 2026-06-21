@@ -2,6 +2,14 @@
 
 **Natural language → OpenSCAD parametric CAD, via a fully-local agentic loop.**
 
+[![ci](https://github.com/dbhavery/textcad/actions/workflows/ci.yml/badge.svg)](https://github.com/dbhavery/textcad/actions/workflows/ci.yml)
+[![license: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
+
+<p align="center">
+  <img src="examples/hexnut_turntable.gif" width="380" alt="textcad-generated hex nut, turntable">
+</p>
+
 Describe a part in plain English; a local LLM writes parametric OpenSCAD; OpenSCAD
 renders and exports it; and **compile, STL-export, and local vision-model gates**
 feed any failure back to the model for repair — until the part is correct.
@@ -18,12 +26,21 @@ model; rendering uses the OpenSCAD binary as an external tool.
    → ✓ correct part
 ```
 
-| The model's first attempt was wrong… | …the vision gate caught it, and attempt 2 was approved |
-|---|---|
-| _"not hexagonal; irregular polygonal shape"_ → fed back | ![hex nut](examples/hexnut_closedloop_iso.png) |
+### Self-correction in action
 
-The inspector judges a **top-down orthographic** view (`examples/hexnut_closedloop_top.png`) —
-a foreshortened isometric makes small vision models misread a hexagon as "rectangular".
+On the hex nut above, the model's **first** attempt was the wrong shape. The vision
+gate — judging a **top-down orthographic** view (`examples/hexnut_closedloop_top.png`),
+because a foreshortened isometric makes small vision models misread a hexagon as
+"rectangular" — rejected it with _"not hexagonal; irregular polygonal shape"_. That
+critique fed back, and **attempt 2 was approved.** No human in the loop.
+
+### Gallery
+
+All generated locally from a one-line description by `qwen2.5-coder:32b`:
+
+| Hex nut | Washer | Standoff | Cube + bore | Pulley |
+|:---:|:---:|:---:|:---:|:---:|
+| ![](examples/hexnut_closedloop_iso.png) | ![](examples/washer.png) | ![](examples/standoff.png) | ![](examples/cube_with_hole.png) | ![](examples/pulley.png) |
 
 ## Install
 
