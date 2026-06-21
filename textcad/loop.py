@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .codegen import generate_scad
-from .render import find_openscad, render_png, render_top_png, export_stl
+from .render import find_openscad, render_png, render_views, export_stl
 
 
 def run(description: str, *, name: str = "part", model: str = "qwen2.5-coder:32b",
@@ -59,10 +59,9 @@ def run(description: str, *, name: str = "part", model: str = "qwen2.5-coder:32b
             continue
 
         if inspector is not None:
-            top = out / f"{name}_top.png"
-            tok, _ = render_top_png(openscad, scad, top)
-            view = top if tok else png  # top-down reads polygons unambiguously
-            approved, crit = inspector(view, description)
+            views = render_views(openscad, scad, out / name)  # top + front + side
+            views = views or [("iso", png)]  # fall back to the iso preview
+            approved, crit = inspector(views, description)
             history.append({"attempt": attempt, "compiled": True, "stl": True,
                             "approved": approved, "feedback": "" if approved else crit[:200]})
             print(f"[attempt {attempt}] compiled=True stl=True  inspector_approved={approved}"

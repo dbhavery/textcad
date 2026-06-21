@@ -49,15 +49,52 @@ def render_png(openscad: str, scad: Path, png: Path) -> tuple[bool, str]:
     ])
 
 
+def _ortho(openscad: str, scad: Path, png: Path, eye: str) -> tuple[bool, str]:
+    """Orthographic render from an eye position looking at the origin. --viewall
+    auto-fits, so only the eye *direction* matters."""
+    return _run(openscad, scad, png, [
+        "--projection=o", f"--camera={eye},0,0,0", "--viewall", "--autocenter",
+        "--imgsize=1024,768", "--colorscheme=Tomorrow", "--render",
+    ])
+
+
 def render_top_png(openscad: str, scad: Path, png: Path) -> tuple[bool, str]:
     """Straight top-down orthographic view. A foreshortened isometric makes small
     vision models misread polygons (a hexagon reads as 'rectangular'); a top view
-    makes the cross-section unambiguous for the inspector. (CADAM renders several
-    orthographic views for the same reason.)"""
-    return _run(openscad, scad, png, [
-        "--projection=o", "--camera=0,0,100,0,0,0", "--viewall", "--autocenter",
-        "--imgsize=1024,768", "--colorscheme=Tomorrow", "--render",
-    ])
+    makes the cross-section unambiguous for the inspector."""
+    return _ortho(openscad, scad, png, "0,0,100")
+
+
+def render_front_png(openscad: str, scad: Path, png: Path) -> tuple[bool, str]:
+    """Front orthographic view (looking along +Y) — shows the XZ face."""
+    return _ortho(openscad, scad, png, "0,-100,0")
+
+
+def render_right_png(openscad: str, scad: Path, png: Path) -> tuple[bool, str]:
+    """Right-side orthographic view (looking along -X) — shows the YZ face."""
+    return _ortho(openscad, scad, png, "100,0,0")
+
+
+# Labelled view set fed to the inspector. Top catches cross-section/polygon shape;
+# front + side catch features on the vertical faces (legs, side grooves, bottom
+# bores). Larger CAD systems render several orthographic views for the same reason.
+VIEWS = (
+    ("top-down", render_top_png),
+    ("front", render_front_png),
+    ("right-side", render_right_png),
+)
+
+
+def render_views(openscad: str, scad: Path, base: Path) -> list[tuple[str, Path]]:
+    """Render the labelled multi-view set next to `base` (e.g. out/part).
+    Returns [(label, png_path), ...] for views that rendered successfully."""
+    out: list[tuple[str, Path]] = []
+    for label, fn in VIEWS:
+        png = base.with_name(f"{base.name}_{label.replace('-', '')}.png")
+        ok, _ = fn(openscad, scad, png)
+        if ok:
+            out.append((label, png))
+    return out
 
 
 def export_stl(openscad: str, scad: Path, stl: Path) -> tuple[bool, str]:

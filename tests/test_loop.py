@@ -4,12 +4,13 @@ import textcad.loop as loop
 from textcad.loop import run
 
 
-def _patch(monkeypatch, *, render, export, gen=lambda *a, **k: "cube(1);\n", top=None):
+def _patch(monkeypatch, *, render, export, gen=lambda *a, **k: "cube(1);\n", views=None):
     monkeypatch.setattr(loop, "find_openscad", lambda: "openscad")
     monkeypatch.setattr(loop, "generate_scad", gen)
     monkeypatch.setattr(loop, "render_png", render)
     monkeypatch.setattr(loop, "export_stl", export)
-    monkeypatch.setattr(loop, "render_top_png", top or (lambda o, s, p: (True, "")))
+    monkeypatch.setattr(loop, "render_views",
+                        views or (lambda o, s, base: [("top-down", base)]))
 
 
 def test_accepts_first_valid_part(monkeypatch, tmp_path):

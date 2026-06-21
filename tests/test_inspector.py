@@ -32,3 +32,19 @@ def test_malformed_json_fails_open(monkeypatch):
     monkeypatch.setattr(inspector_mod, "ollama_vision", lambda *a, **k: "not json at all")
     approved, crit = make_vlm_inspector()("img.png", "a hex nut")
     assert approved is True
+
+
+def test_multiview_passes_all_images_and_labels(monkeypatch):
+    seen = {}
+
+    def fake(prompt, images, *, model, json_format, timeout):
+        seen["prompt"] = prompt
+        seen["n"] = len(images)
+        return '{"approved": true, "critique": ""}'
+
+    monkeypatch.setattr(inspector_mod, "ollama_vision", fake)
+    views = [("top-down", "t.png"), ("front", "f.png"), ("right-side", "r.png")]
+    approved, _ = make_vlm_inspector()(views, "a bracket")
+    assert approved is True
+    assert seen["n"] == 3
+    assert "top-down, front, right-side" in seen["prompt"]

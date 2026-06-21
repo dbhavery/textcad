@@ -27,13 +27,16 @@ def ollama_generate(prompt: str, *, model: str, json_format: bool = False,
     return _post(body, timeout)
 
 
-def ollama_vision(prompt: str, image: Path | str, *, model: str,
+def ollama_vision(prompt: str, images: Path | str | list, *, model: str,
                   json_format: bool = True, timeout: int = 180) -> str:
-    """Vision generation: send `prompt` plus one image. Returns the `response`."""
+    """Vision generation: send `prompt` plus one or more images (a single path or a
+    list of paths, judged together). Returns the `response`."""
+    if isinstance(images, (str, Path)):
+        images = [images]
     body: dict = {
         "model": model,
         "prompt": prompt,
-        "images": [base64.b64encode(Path(image).read_bytes()).decode("ascii")],
+        "images": [base64.b64encode(Path(im).read_bytes()).decode("ascii") for im in images],
         "stream": False,
     }
     if json_format:
