@@ -56,7 +56,10 @@ BUILDING MULTI-PART SHAPES — placement rules (follow strictly):
     * upright plate (thin in X)     -> hole is the X axis, rotate([0, 90, 0])
     * plate thin in Y               -> hole is the Y axis, rotate([90, 0, 0])
   "Centred in the leg" means centred across the leg's two LONG dimensions, drilling
-  through the short (thickness) one.
+  through the short (thickness) one. Give BOTH in-plane coordinates a value in the
+  MIDDLE of the leg (e.g. height*0.5 and width*0.5) — never 0, which is an edge and
+  leaves a notch instead of a hole. Mnemonic: rotate([0,90,0]) makes a cylinder point
+  along X; rotate([90,0,0]) makes it point along Y; no rotate = along Z.
 - For the through-direction, do NOT compute the wall thickness. Make the drill cylinder
   MUCH LONGER than the part and centered (h = 200, center = true); an over-long centered
   cylinder punches fully through wherever the material is. You then only need the two
