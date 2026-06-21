@@ -4,11 +4,13 @@ from __future__ import annotations
 from pathlib import Path
 
 from .codegen import generate_scad
+from .llm import ollama_generate
 from .render import find_openscad, render_png, render_views, make_contact_sheet, export_stl
 
 
 def run(description: str, *, name: str = "part", model: str = "qwen2.5-coder:32b",
-        iters: int = 3, inspector=None, out_dir: str | Path = "out") -> dict:
+        iters: int = 3, inspector=None, out_dir: str | Path = "out",
+        llm=ollama_generate) -> dict:
     """Generate an OpenSCAD part from `description`, iterating up to `iters` times.
 
     Each iteration runs three gates; a failure at any gate feeds specific text back
@@ -36,7 +38,7 @@ def run(description: str, *, name: str = "part", model: str = "qwen2.5-coder:32b
 
     for attempt in range(1, iters + 1):
         code = generate_scad(description, model=model, prior_code=code,
-                             error=error, critique=critique)
+                             error=error, critique=critique, llm=llm)
         scad.write_text(code, encoding="utf-8")
         critique = None
 

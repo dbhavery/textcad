@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 
+from .backends import DEFAULT_MODEL, resolve
 from .loop import run
 
 
@@ -12,7 +13,11 @@ def main(argv: list[str] | None = None) -> None:
         description="Natural language -> OpenSCAD parametric CAD via a local agentic loop.")
     ap.add_argument("description", help="plain-English part description")
     ap.add_argument("--name", default="part", help="output basename (out/<name>.scad|png|stl)")
-    ap.add_argument("--model", default="qwen2.5-coder:32b", help="Ollama model for codegen")
+    ap.add_argument("--backend", default="ollama", choices=["ollama", "claude", "codex"],
+                    help="codegen backend: local 'ollama' (default), or the subscription "
+                         "'claude'/'codex' CLIs (no API key) for higher quality")
+    ap.add_argument("--model", default=None,
+                    help="codegen model; defaults per backend (ollama -> qwen2.5-coder:32b)")
     ap.add_argument("--iters", type=int, default=3, help="max generate/fix attempts")
     ap.add_argument("--inspect", nargs="?", const="qwen2.5vl:7b", default=None,
                     metavar="VLM_MODEL",
@@ -20,13 +25,16 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--out", default="out", help="output directory (default: ./out)")
     args = ap.parse_args(argv)
 
+    llm = resolve(args.backend)
+    model = args.model if args.model is not None else DEFAULT_MODEL[args.backend]
+
     inspector = None
     if args.inspect:
         from .inspector import make_vlm_inspector
         inspector = make_vlm_inspector(args.inspect)
 
-    result = run(args.description, name=args.name, model=args.model,
-                 iters=args.iters, inspector=inspector, out_dir=args.out)
+    result = run(args.description, name=args.name, model=model, iters=args.iters,
+                 inspector=inspector, out_dir=args.out, llm=llm)
 
     print("\n=== RESULT ===")
     for k in ("description", "attempts", "scad", "png", "stl", "error"):
