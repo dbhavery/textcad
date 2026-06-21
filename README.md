@@ -1,85 +1,121 @@
-# textcad — text → OpenSCAD agentic proof
+# textcad
 
-A **clean-room** demonstration of the core idea behind CADAM, built from scratch
-so it carries **none of CADAM's GPLv3 obligations**.
+**Natural language → OpenSCAD parametric CAD, via a fully-local agentic loop.**
 
-## The idea (clean-room, not the code)
+Describe a part in plain English; a local LLM writes parametric OpenSCAD; OpenSCAD
+renders and exports it; and **compile, STL-export, and local vision-model gates**
+feed any failure back to the model for repair — until the part is correct.
+
+No cloud, no API keys, no telemetry. Codegen runs on a local [Ollama](https://ollama.com)
+model; rendering uses the OpenSCAD binary as an external tool.
 
 ```
-"a hex nut, 10mm across flats, 5mm hole"
-   → local LLM writes parametric OpenSCAD code      (Ollama qwen3:14b)
-   → OpenSCAD CLI renders a PNG + exports an STL     (binary used as a tool)
-   → if it fails to compile, the error is fed back   ← the agentic loop
-     and the model rewrites until it compiles
-   → a vision inspector critiques the render          (pluggable, see below)
+"a hexagonal nut, 16mm across flats, 6mm thick, 8mm center hole"
+   → LLM writes parametric OpenSCAD          (Ollama, e.g. qwen2.5-coder:32b)
+   → OpenSCAD renders iso + top views, exports STL
+   → [compile gate] [STL-export gate] [vision-model gate]
+   → a failed gate feeds specific feedback back → the model rewrites
+   → ✓ correct part
 ```
 
-Only the *pattern* is borrowed (LLM writes code → render → inspect → iterate).
-Every line here is original. The OpenSCAD binary is **invoked as an external
-tool**, which does not create a derivative work — so nothing built on top of this
-inherits GPL.
+| The model's first attempt was wrong… | …the vision gate caught it, and attempt 2 was approved |
+|---|---|
+| _"not hexagonal; irregular polygonal shape"_ → fed back | ![hex nut](examples/hexnut_closedloop_iso.png) |
 
-## Why this design
+The inspector judges a **top-down orthographic** view (`examples/hexnut_closedloop_top.png`) —
+a foreshortened isometric makes small vision models misread a hexagon as "rectangular".
 
-- **Local codegen, no retail API** — model calls go through Don's
-  `local-llm-synthesis` skill (Ollama on `localhost:11434`), honoring the
-  bare-metal-inference rule. Swap `--model` for any pulled Ollama model.
-- **OpenSCAD as the geometry kernel** — parametric, scriptable, headless-renderable
-  from the CLI; no WASM/Three.js stack needed for a proof.
-- **Compile-error feedback is the agent** — the highest-value, vision-free half of
-  CADAM's loop. The model gets the real compiler `stderr` and fixes its own code.
-- **Inspector is pluggable** — there is no local vision model installed
-  (`ollama list` has qwen3 + gemma4 + embeddings, no llava/qwen-vl), so visual
-  critique is done out-of-band for now (render the PNG, look at it). Drop in a
-  local VLM later to close the loop fully autonomously.
+## Install
+
+```bash
+git clone https://github.com/dbhavery/textcad
+cd textcad
+pip install -e .
+
+# prerequisites
+#  1. Ollama running locally with a codegen model:   ollama pull qwen2.5-coder:32b
+#  2. (optional, for --inspect) a vision model:        ollama pull qwen2.5vl:7b
+#  3. an OpenSCAD binary on PATH, or set $TEXTCAD_OPENSCAD,
+#     or drop a portable build under tools/openscad-*/
+```
 
 ## Usage
 
 ```bash
-# compile-only loop (fast, accepts first valid-and-exportable part)
-python textcad.py "a hexagonal nut, 16mm across flats, 6mm thick, 8mm center hole" --model qwen2.5-coder:32b
+# compile-only loop (fast; accepts the first part that compiles and exports)
+textcad "a flat washer, 24mm outer, 10mm hole, 2.5mm thick" --model qwen2.5-coder:32b
 
-# full closed loop: add the local vision-model inspector
-python textcad.py "a hexagonal nut, 16mm across flats, 6mm thick, 8mm center hole" \
+# full closed loop with the local vision inspector
+textcad "a hexagonal nut, 16mm across flats, 6mm thick, 8mm center hole" \
     --model qwen2.5-coder:32b --inspect qwen2.5vl:7b --iters 4
 
 # compare codegen models on a fixed part set
-python bench.py qwen2.5-coder:32b
+python scripts/bench.py qwen2.5-coder:32b
 ```
 
-Outputs land in `out/<name>.scad`, `out/<name>.png` (iso), `out/<name>_top.png`
-(top-down, used by the inspector), `out/<name>.stl`.
+Outputs: `out/<name>.scad`, `out/<name>.png` (iso), `out/<name>_top.png`
+(top-down, for the inspector), `out/<name>.stl`.
 
-## Gates (what the loop checks each iteration)
+## The three gates
 
-1. **Compile** — OpenSCAD must render a preview; `stderr` feeds back on failure.
-2. **STL export** — must produce a non-empty STL; catches mixed 2D/3D and
+Each iteration runs the gates in order; a failure feeds targeted text back to the
+next generation:
+
+1. **Compile** — OpenSCAD must render a preview; the compiler `stderr` feeds back.
+2. **STL export** — must produce a non-empty STL. Catches mixed 2D/3D and
    non-manifold geometry that previews fine but won't export.
-3. **Visual inspector** (optional, `--inspect`) — a local VLM judges a **top-down
-   orthographic** render against the request and rejects valid-but-wrong shapes
-   (e.g. a round disc when a hexagon was asked for). Top-down is essential: a
-   foreshortened isometric makes a 7B VLM misread a hexagon as "rectangular".
+3. **Visual inspector** *(optional, `--inspect`)* — a local VLM judges the top-down
+   render against the request and rejects valid-but-*wrong* shapes (a round disc
+   when a hexagon was asked for) that the first two gates can't see.
 
-## Requirements
+## Library API
 
-- OpenSCAD — bundled portable copy in `tools/openscad-*/` (auto-detected), or installed.
-- Ollama running with:
-  - a codegen model — `ollama pull qwen2.5-coder:32b` (best tested; `qwen3:14b` weaker)
-  - a vision model for `--inspect` — `ollama pull qwen2.5vl:7b`
-- `local-llm-synthesis` skill at `C:/Users/dbhav/Projects/Skills/local-llm-synthesis`
+```python
+from textcad import run, make_vlm_inspector
 
-## Status — closed loop WORKS, fully local
+result = run(
+    "a hexagonal nut, 16mm across flats, 6mm thick, 8mm center hole",
+    model="qwen2.5-coder:32b",
+    inspector=make_vlm_inspector("qwen2.5vl:7b"),  # omit for compile-only
+    iters=4,
+)
+print(result["stl"], result["attempts"])
+```
 
-Verified end-to-end: text -> qwen2.5-coder:32b writes OpenSCAD -> render iso+top ->
-compile + STL + VLM gates -> critique feeds back -> regenerate. On a hex nut the
-loop self-corrected a wrong shape on attempt 1 to an APPROVED correct part on
-attempt 2 — autonomous, no retail API.
+Every layer takes an injectable backend (`llm=`, `inspector=`), so the loop is
+unit-tested with no Ollama and no OpenSCAD — see `tests/`.
 
-Model findings: qwen2.5-coder:32b handles single-feature parts (nut, washer) but
-is non-deterministic and still struggles with multi-feature parts (perpendicular
-legs, D-profile shafts, finger grooves). qwen2.5vl:7b is a reliable shape/feature
-judge only on top-down ortho views.
+## Layout
 
-Not a product. Natural next steps: multi-view inspection (front+side, not just
-top), a stronger/larger VLM for complex parts, and a parameter-slider UI over the
-named OpenSCAD vars.
+```
+textcad/
+  llm.py        minimal local-Ollama client (text + vision)
+  codegen.py    system prompt + OpenSCAD code generation
+  render.py     OpenSCAD invocation: iso/top render + STL export
+  inspector.py  local vision-model judge (top-down view)
+  loop.py       the agentic loop + the three gates
+  cli.py        `textcad` command
+scripts/bench.py  fixed-part-set model comparison
+tests/            mock-backed gate-logic + codegen + inspector tests
+```
+
+## What works, what doesn't (honest findings)
+
+- The closed loop is **verified end-to-end and fully local.** On a hex nut it
+  self-corrected a wrong shape into an approved correct part in two attempts.
+- **Codegen model matters.** `qwen2.5-coder:32b` produces real regular polygons and
+  uses `difference()` natively; a smaller `qwen3:14b` makes wedges and skips
+  subtraction. Both still struggle with multi-feature parts (perpendicular legs,
+  D-profile shafts, finger grooves) and are non-deterministic.
+- **Top-down views are essential** for a small VLM judge — it misreads polygons in
+  isometric. (Larger CAD systems render several orthographic views for this reason.)
+
+Natural next steps: multi-view inspection (front + side, not just top), a larger
+VLM for complex parts, and a parameter-slider UI over the named OpenSCAD variables.
+
+## License & provenance
+
+MIT — see [LICENSE](LICENSE). textcad is a **clean-room** project: it reproduces a
+general *pattern* (LLM writes CAD code → render → inspect → iterate) but contains no
+third-party source. The OpenSCAD binary is invoked as an external tool, so textcad
+is an independent work and inherits **no GPL obligations**.
