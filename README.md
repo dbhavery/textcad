@@ -45,9 +45,12 @@ an engineering drawing — so features on different faces are all legible at onc
 
 All generated locally from a one-line description by `qwen2.5-coder:32b`:
 
-| Hex nut | Washer | Standoff | Cube + bore | Pulley |
-|:---:|:---:|:---:|:---:|:---:|
-| ![](examples/hexnut_closedloop_iso.png) | ![](examples/washer.png) | ![](examples/standoff.png) | ![](examples/cube_with_hole.png) | ![](examples/pulley.png) |
+| Hex nut | Washer | Standoff | Cube + bore | Pulley | L-bracket |
+|:---:|:---:|:---:|:---:|:---:|:---:|
+| ![](examples/hexnut_closedloop_iso.png) | ![](examples/washer.png) | ![](examples/standoff.png) | ![](examples/cube_with_hole.png) | ![](examples/pulley.png) | ![](examples/lbracket.png) |
+
+The L-bracket is a **multi-feature** part — two perpendicular legs and a bolt hole
+through the flat face of *each*. Getting it right needed the gate work below.
 
 ## Install
 
@@ -131,23 +134,29 @@ tests/            mock-backed gate-logic + codegen + inspector tests
 
 ## What works, what doesn't (honest findings)
 
-- The closed loop is **verified end-to-end and fully local.** On a hex nut it
-  self-corrected a wrong shape into an approved correct part in two attempts.
-- **Codegen model matters, and is now the bottleneck.** `qwen2.5-coder:32b` produces
-  real regular polygons and uses `difference()` natively (a smaller `qwen3:14b` makes
-  wedges and skips subtraction). It's reliable on single-feature parts but still
-  struggles to *generate* multi-feature parts (perpendicular legs, D-profile shafts,
-  grooves) even with critique feedback, and is non-deterministic.
+- The closed loop is **verified end-to-end and fully local** — single-feature parts
+  (hex nut, washer, standoff, cube+bore) and now a **multi-feature L-bracket** (two
+  perpendicular legs, a bolt hole through each leg's flat face).
+- **Multi-feature generation needed prompt engineering, not a bigger model.** A
+  smaller `qwen3:14b` makes wedges and skips `difference()`; `qwen2.5-coder:32b` does
+  the geometry but originally botched multi-body parts by assembling with
+  `center=true`+`rotate` (disconnected "plus" shapes) and ran bolt holes along a
+  plate's length. Three prompt fixes — corner-based placement, an explicit
+  hole-goes-through-the-thin-dimension rule, and a *plan-in-comments* step — got it
+  generating correct L-brackets a majority of the time, which is all the agentic loop
+  needs to converge.
 - **Inspection is solved for multi-feature parts** via the orthographic contact
   sheet: where a 7B VLM failed on both a single isometric and a raw 3-image call, it
   correctly approves a real L-bracket and rejects a flat L-plate from one labelled
-  contact sheet. The remaining gap is generation, not inspection.
+  contact sheet.
 - A *larger* VLM (`qwen2.5vl:32b`) needs a newer Ollama than tested here (0.30.10
   fails to load its vision encoder); the contact-sheet trick made the small VLM
   sufficient, so it isn't required.
 
-Natural next steps: a stronger/larger codegen model (or a part-template library) for
-complex multi-feature parts, and a parameter-slider UI over the named OpenSCAD vars.
+Still-open edge: the upright-plate hole axis is the coder's weakest spot (it
+sometimes confuses `rotate([0,90,0])` vs `rotate([90,0,0])`), so complex parts can
+need a few attempts. Natural next steps: more part archetypes in the prompt (or a
+template library), and a parameter-slider UI over the named OpenSCAD vars.
 
 ## License & provenance
 
