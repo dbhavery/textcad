@@ -38,6 +38,55 @@ difference() {
   cylinder(h = thick + 1, d = inner_d, center = true); // hole: SUBTRACTED, taller so it punches through
 }
 ---
+
+BUILDING MULTI-PART SHAPES — placement rules (follow strictly):
+- Assemble shapes by positioning each primitive at EXPLICIT coordinates anchored at
+  a CORNER. Do NOT use center=true when parts must line up, and do NOT use rotate()
+  to PLACE a part — size and position cubes instead (rotate() is only for orienting
+  a hole). center=true + rotate + translate is the #1 cause of disconnected, gappy
+  geometry.
+- Where two parts join they must OVERLAP (share a volume), so the result is ONE
+  connected solid. Mentally check the coordinate ranges actually touch — a gap means
+  two loose pieces, not one part.
+- HOLE ORIENTATION (critical): a bolt / mounting hole passes through the FLAT face of
+  a plate, i.e. along the plate's THINNEST dimension (its thickness), so the plate can
+  bolt flat against a surface. NEVER run a bolt hole along a plate's long or wide
+  dimension. Pick the axis by which dimension is the thickness:
+    * plate lying flat (thin in Z)  -> hole is the Z axis, no rotate()
+    * upright plate (thin in X)     -> hole is the X axis, rotate([0, 90, 0])
+    * plate thin in Y               -> hole is the Y axis, rotate([90, 0, 0])
+  "Centred in the leg" means centred across the leg's two LONG dimensions, drilling
+  through the short (thickness) one.
+- For the through-direction, do NOT compute the wall thickness. Make the drill cylinder
+  MUCH LONGER than the part and centered (h = 200, center = true); an over-long centered
+  cylinder punches fully through wherever the material is. You then only need the two
+  in-plane coordinates and the correct axis (above), and to keep it clear of other parts.
+
+Worked example 2 — an L-bracket: two perpendicular plates meeting at a corner,
+positioned by corners and overlapping at the joint (one connected solid), with a
+bolt hole through each plate from the correct direction:
+---
+$fn = 64;
+leg = 40; wide = 30; t = 4; hole = 5;
+difference() {
+  union() {
+    cube([t,   wide, leg]);  // vertical plate: thin in x, full height in z
+    cube([leg, wide, t  ]);  // horizontal plate: long in x, thin in z; shares the bottom corner
+  }
+  // Over-long centered drills: only the two in-plane coords matter; the long axis
+  // punches all the way through wherever the plate is.
+  translate([leg*0.6, wide/2, 0]) cylinder(h = 200, d = hole, center = true);                  // hole down through horizontal plate (z axis)
+  translate([0, wide/2, leg*0.6]) rotate([0, 90, 0]) cylinder(h = 200, d = hole, center = true); // hole through vertical plate (x axis)
+}
+---
+
+PLAN FIRST, IN COMMENTS. Before the difference(), write a short `// PLAN:` comment
+block working the geometry out numerically — the x/y/z coordinate box of each solid
+(check the boxes OVERLAP so the part is connected), and for each hole its axis
+(X/Y/Z per the orientation rule), the two in-plane coords it is centred on, and which
+part it passes through. Then write code that matches the plan. Comments are valid
+OpenSCAD, so this keeps the output "code only".
+
 Now build the requested part with the same rigor.
 """
 
@@ -65,8 +114,12 @@ Here is the code to correct:
 {code}
 ---
 Return a COMPLETE corrected OpenSCAD program that addresses every point in the
-critique. Same hard rules: OpenSCAD code only, no markdown, no prose, fully
-parametric, standalone (no libraries).
+critique. Re-apply the placement rules: assemble by positioning primitives at
+explicit corner coordinates (NOT center=true + rotate), make joining parts OVERLAP
+into one connected solid, and put each hole's axis through the CENTRE of the face
+it enters so it passes through solid material. Keep the parts of the shape that are
+already correct; change only what the critique flags. Same hard rules: OpenSCAD code
+only, no markdown, no prose, fully parametric, standalone (no libraries).
 """
 
 _FENCE = re.compile(r"^```[a-zA-Z]*\n|\n```$", re.MULTILINE)

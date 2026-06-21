@@ -39,9 +39,11 @@ thickness, or proportion — assume all sizes are correct. Approve as long as:
 Reject ONLY for a wrong gross shape or a missing/wrong named feature — for example a
 round disc when a hexagon was asked for, no hole when a hole was requested, a single
 flat plate when two perpendicular legs were requested, or a plain round shaft hole
-when a D-shaped one was requested. If the form and all named features are present,
-APPROVE it. Give a short, concrete critique naming the specific shape/feature defect
-and which view shows it (or "" if approved).
+when a D-shaped one was requested. Judge ONLY features that appear in the request
+above — do NOT invent or require any feature (D-shapes, grooves, etc.) that was not
+asked for. If the form and all named features are present, APPROVE it. When you
+reject, name the specific defect, the feature from the request it concerns, and which
+view shows it (or give "" if approved).
 
 Reply ONLY as JSON: {{"approved": true|false, "critique": "..."}}
 """
