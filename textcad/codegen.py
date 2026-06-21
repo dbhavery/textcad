@@ -6,6 +6,29 @@ import re
 
 from .llm import ollama_generate
 
+# A correct through-hole helper is prepended to every generated file. The model only
+# has to choose the axis and an in-plane position — it cannot get the error-prone
+# rotate()/length/center mechanics wrong, which was the main multi-feature failure.
+PRELUDE = """\
+// ===textcad:helpers (provided — do NOT redefine these)===
+$fn = 64;
+// thru_hole(pos, axis, d): SUBTRACT inside difference() to drill a through-hole.
+//   axis = "X" | "Y" | "Z" = the drilling direction (a plate's THIN dimension).
+//   pos  = [x, y, z], a point on the hole's axis — centre it on the part's two
+//          in-plane dimensions. The drill is over-long so it always punches through.
+module thru_hole(pos, axis, d) {
+  translate(pos) {
+    if (axis == "X") rotate([0, 90, 0]) cylinder(h = 1000, d = d, center = true);
+    else if (axis == "Y") rotate([90, 0, 0]) cylinder(h = 1000, d = d, center = true);
+    else cylinder(h = 1000, d = d, center = true);
+  }
+}
+// ===end helpers===
+"""
+
+_PRELUDE_RE = re.compile(
+    r"//\s*===textcad:helpers.*?//\s*===end helpers===\n?", re.DOTALL)
+
 # The system prompt carries a worked difference() example — small local models
 # omit difference() without one, producing solids with no holes.
 SYSTEM = """\
@@ -35,7 +58,7 @@ inner_d = 8;    // hole diameter, mm
 thick   = 3;    // thickness, mm
 difference() {
   cylinder(h = thick, d = outer_d, center = true);   // solid body
-  cylinder(h = thick + 1, d = inner_d, center = true); // hole: SUBTRACTED, taller so it punches through
+  thru_hole([0, 0, 0], "Z", inner_d);                // centred through-hole (provided helper)
 }
 ---
 
@@ -48,22 +71,18 @@ BUILDING MULTI-PART SHAPES — placement rules (follow strictly):
 - Where two parts join they must OVERLAP (share a volume), so the result is ONE
   connected solid. Mentally check the coordinate ranges actually touch — a gap means
   two loose pieces, not one part.
-- HOLE ORIENTATION (critical): a bolt / mounting hole passes through the FLAT face of
-  a plate, i.e. along the plate's THINNEST dimension (its thickness), so the plate can
-  bolt flat against a surface. NEVER run a bolt hole along a plate's long or wide
-  dimension. Pick the axis by which dimension is the thickness:
-    * plate lying flat (thin in Z)  -> hole is the Z axis, no rotate()
-    * upright plate (thin in X)     -> hole is the X axis, rotate([0, 90, 0])
-    * plate thin in Y               -> hole is the Y axis, rotate([90, 0, 0])
-  "Centred in the leg" means centred across the leg's two LONG dimensions, drilling
-  through the short (thickness) one. Give BOTH in-plane coordinates a value in the
-  MIDDLE of the leg (e.g. height*0.5 and width*0.5) — never 0, which is an edge and
-  leaves a notch instead of a hole. Mnemonic: rotate([0,90,0]) makes a cylinder point
-  along X; rotate([90,0,0]) makes it point along Y; no rotate = along Z.
-- For the through-direction, do NOT compute the wall thickness. Make the drill cylinder
-  MUCH LONGER than the part and centered (h = 200, center = true); an over-long centered
-  cylinder punches fully through wherever the material is. You then only need the two
-  in-plane coordinates and the correct axis (above), and to keep it clear of other parts.
+- HOLES — always use the PROVIDED thru_hole(pos, axis, d) helper (already defined at
+  the top of the file). SUBTRACT a thru_hole(...) call for each hole inside difference().
+  Do NOT write cylinder()/rotate() for holes yourself, and do NOT redefine thru_hole.
+  You only choose two things:
+    * axis = the plate's THIN dimension (the thickness it is bolted through):
+        plate lying flat (thin in Z) -> "Z";  upright plate (thin in X) -> "X";
+        plate thin in Y -> "Y".  A bolt hole goes through the FLAT face, never along
+        the plate's long or wide dimension.
+    * pos  = a point centred on the plate's two LONG dimensions (e.g. middle of the
+        height and the width) — never 0, which is an edge and leaves a notch. The
+        third coordinate (the through-axis) can be anything inside the plate; the
+        drill is over-long.
 
 Worked example 2 — an L-bracket: two perpendicular plates meeting at a corner,
 positioned by corners and overlapping at the joint (one connected solid), with a
@@ -76,10 +95,9 @@ difference() {
     cube([t,   wide, leg]);  // vertical plate: thin in x, full height in z
     cube([leg, wide, t  ]);  // horizontal plate: long in x, thin in z; shares the bottom corner
   }
-  // Over-long centered drills: only the two in-plane coords matter; the long axis
-  // punches all the way through wherever the plate is.
-  translate([leg*0.6, wide/2, 0]) cylinder(h = 200, d = hole, center = true);                  // hole down through horizontal plate (z axis)
-  translate([0, wide/2, leg*0.6]) rotate([0, 90, 0]) cylinder(h = 200, d = hole, center = true); // hole through vertical plate (x axis)
+  // Holes via the provided helper: pick axis (the plate's thin dimension) + a centred point.
+  thru_hole([leg*0.6, wide/2, t/2], "Z", hole);  // through horizontal plate (flat, thin in z)
+  thru_hole([t/2, wide/2, leg*0.6], "X", hole);  // through vertical plate (upright, thin in x)
 }
 ---
 
@@ -117,12 +135,13 @@ Here is the code to correct:
 {code}
 ---
 Return a COMPLETE corrected OpenSCAD program that addresses every point in the
-critique. Re-apply the placement rules: assemble by positioning primitives at
-explicit corner coordinates (NOT center=true + rotate), make joining parts OVERLAP
-into one connected solid, and put each hole's axis through the CENTRE of the face
-it enters so it passes through solid material. Keep the parts of the shape that are
-already correct; change only what the critique flags. Same hard rules: OpenSCAD code
-only, no markdown, no prose, fully parametric, standalone (no libraries).
+critique. Re-apply the rules: assemble by positioning primitives at explicit corner
+coordinates (NOT center=true + rotate), make joining parts OVERLAP into one connected
+solid, and drill every hole with the provided thru_hole(pos, axis, d) helper —
+choosing axis = the plate's thin dimension and pos = the centre of its two long
+dimensions (a missing/edge hole usually means the wrong axis or pos). Keep the parts
+of the shape that are already correct; change only what the critique flags. Same hard
+rules: OpenSCAD code only, no markdown, no prose, fully parametric, standalone.
 """
 
 _FENCE = re.compile(r"^```[a-zA-Z]*\n|\n```$", re.MULTILINE)
@@ -147,4 +166,6 @@ def generate_scad(description: str, *, model: str, prior_code: str | None = None
         prompt = SYSTEM + "\n\n" + CRITIQUE.format(critique=critique[:1500], code=prior_code)
     else:
         prompt = SYSTEM + f"\n\nDescribe-to-build: {description}\n"
-    return clean(llm(prompt, model=model, json_format=False, timeout=240))
+    code = _PRELUDE_RE.sub("", clean(llm(prompt, model=model, json_format=False, timeout=240)))
+    # Prepend the correct helper so the model can't get the hole mechanics wrong.
+    return PRELUDE + "\n" + code.lstrip()
