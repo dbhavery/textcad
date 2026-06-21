@@ -83,6 +83,21 @@ python scripts/bench.py qwen2.5-coder:32b
 Outputs: `out/<name>.scad`, `out/<name>.png` (iso), `out/<name>_top.png`
 (top-down, for the inspector), `out/<name>.stl`.
 
+### Codegen backends (local-first, optional frontier)
+
+textcad is **local by default** (`--backend ollama`). For hard multi-feature parts
+you can opt into a frontier model via its **subscription CLI — no API key**:
+
+```bash
+textcad "an L-bracket, 2 perpendicular legs, a 5mm hole in each leg" --backend claude
+textcad "..." --backend codex            # OpenAI Codex CLI
+```
+
+The local 32B coder needs heavy prompting for multi-feature geometry and still slips
+(~2/3 correct); a frontier backend places it correctly **zero-shot, one attempt**.
+Backends run from a neutral temp dir so the agent doesn't inherit your project
+context. Default stays Ollama — nothing leaves your machine unless you ask for it.
+
 ## The three gates
 
 Each iteration runs the gates in order; a failure feeds targeted text back to the
@@ -137,26 +152,31 @@ tests/            mock-backed gate-logic + codegen + inspector tests
 - The closed loop is **verified end-to-end and fully local** — single-feature parts
   (hex nut, washer, standoff, cube+bore) and now a **multi-feature L-bracket** (two
   perpendicular legs, a bolt hole through each leg's flat face).
-- **Multi-feature generation needed prompt engineering, not a bigger model.** A
-  smaller `qwen3:14b` makes wedges and skips `difference()`; `qwen2.5-coder:32b` does
-  the geometry but originally botched multi-body parts by assembling with
-  `center=true`+`rotate` (disconnected "plus" shapes) and ran bolt holes along a
-  plate's length. Three prompt fixes — corner-based placement, an explicit
-  hole-goes-through-the-thin-dimension rule, and a *plan-in-comments* step — got it
-  generating correct L-brackets a majority of the time, which is all the agentic loop
-  needs to converge.
+- **Multi-feature generation needed prompt engineering + a helper, not a bigger
+  model.** A smaller `qwen3:14b` makes wedges and skips `difference()`;
+  `qwen2.5-coder:32b` does the geometry but originally botched multi-body parts by
+  assembling with `center=true`+`rotate` (disconnected "plus" shapes) and ran bolt
+  holes along a plate's length. Fixes, in order of impact:
+  1. **corner-based placement** rule + a worked L-bracket example → reliable gross
+     shape (a real L, not a plus);
+  2. a **`plan-in-comments`** step so the model reasons about coordinates first;
+  3. an **injected `thru_hole(pos, axis, d)` helper** prepended to every file — the
+     model calls it and only chooses the axis (the plate's thin dimension) and a
+     centred position, so it can't get the error-prone `rotate`/length/`center`
+     mechanics wrong. This took the both-holes-correct rate from ~1/3 to ~2/3.
+  At ~2/3 correct per attempt, the agentic loop reliably converges on a correct part.
 - **Inspection is solved for multi-feature parts** via the orthographic contact
   sheet: where a 7B VLM failed on both a single isometric and a raw 3-image call, it
   correctly approves a real L-bracket and rejects a flat L-plate from one labelled
   contact sheet.
-- A *larger* VLM (`qwen2.5vl:32b`) needs a newer Ollama than tested here (0.30.10
-  fails to load its vision encoder); the contact-sheet trick made the small VLM
-  sufficient, so it isn't required.
+- A *larger* VLM (`qwen2.5vl:32b`) is **unsupported on the current Ollama (0.30.10
+  is the latest; it fails to load that model's vision encoder)** — but the
+  contact-sheet trick made the small 7B sufficient, so it isn't required.
 
-Still-open edge: the upright-plate hole axis is the coder's weakest spot (it
-sometimes confuses `rotate([0,90,0])` vs `rotate([90,0,0])`), so complex parts can
-need a few attempts. Natural next steps: more part archetypes in the prompt (or a
-template library), and a parameter-slider UI over the named OpenSCAD vars.
+Still-open edge: the coder's last weak spot is *which* axis the upright-plate hole
+takes (~1 in 3 swaps it); the helper fixes the mechanics, not that semantic choice.
+Next steps: more part archetypes in the prompt (or a template library), and a
+parameter-slider UI over the named OpenSCAD vars.
 
 ## License & provenance
 
