@@ -12,7 +12,7 @@
 
 Describe a part in plain English; a local LLM writes parametric OpenSCAD; OpenSCAD
 renders and exports it; and **compile, STL-export, and local vision-model gates**
-feed any failure back to the model for repair — until the part is correct.
+feed any failure back to the model for repair, until the part is correct.
 
 No cloud, no API keys, no telemetry. Codegen runs on a local [Ollama](https://ollama.com)
 model; rendering uses the OpenSCAD binary as an external tool.
@@ -29,15 +29,15 @@ model; rendering uses the OpenSCAD binary as an external tool.
 ### Self-correction in action
 
 On the hex nut above, the model's **first** attempt was the wrong shape. The vision
-gate — judging a **top-down orthographic** view (`examples/hexnut_closedloop_top.png`),
+gate, judging a **top-down orthographic** view (`examples/hexnut_closedloop_top.png`),
 because a foreshortened isometric makes small vision models misread a hexagon as
-"rectangular" — rejected it with _"not hexagonal; irregular polygonal shape"_. That
+"rectangular", rejected it with _"not hexagonal; irregular polygonal shape"_. That
 critique fed back, and **attempt 2 was approved.** No human in the loop.
 
 ### Multi-view inspection
 
-The vision gate judges an **orthographic contact sheet** — one labelled image, like
-an engineering drawing — so features on different faces are all legible at once:
+The vision gate judges an **orthographic contact sheet**, one labelled image, like
+an engineering drawing, so features on different faces are all legible at once:
 
 ![contact sheet](examples/contact_sheet.png)
 
@@ -49,7 +49,7 @@ All generated locally from a one-line description by `qwen2.5-coder:32b`:
 |:---:|:---:|:---:|:---:|:---:|:---:|
 | ![](examples/hexnut_closedloop_iso.png) | ![](examples/washer.png) | ![](examples/standoff.png) | ![](examples/cube_with_hole.png) | ![](examples/pulley.png) | ![](examples/lbracket.png) |
 
-The L-bracket is a **multi-feature** part — two perpendicular legs and a bolt hole
+The L-bracket is a **multi-feature** part: two perpendicular legs and a bolt hole
 through the flat face of *each*. Getting it right needed the gate work below.
 
 ## Install
@@ -86,7 +86,7 @@ Outputs: `out/<name>.scad`, `out/<name>.png` (iso), `out/<name>_top.png`
 ### Codegen backends (local-first, optional frontier)
 
 textcad is **local by default** (`--backend ollama`). For hard multi-feature parts
-you can opt into a frontier model via its **subscription CLI — no API key**:
+you can opt into a frontier model via its **subscription CLI, no API key**:
 
 ```bash
 textcad "an L-bracket, 2 perpendicular legs, a 5mm hole in each leg" --backend claude
@@ -96,23 +96,23 @@ textcad "..." --backend codex            # OpenAI Codex CLI
 The local 32B coder needs heavy prompting for multi-feature geometry and still slips
 (~2/3 correct); a frontier backend places it correctly **zero-shot, one attempt**.
 Backends run from a neutral temp dir so the agent doesn't inherit your project
-context. Default stays Ollama — nothing leaves your machine unless you ask for it.
+context. Default stays Ollama. Nothing leaves your machine unless you ask for it.
 
 ## The three gates
 
 Each iteration runs the gates in order; a failure feeds targeted text back to the
 next generation:
 
-1. **Compile** — OpenSCAD must render a preview; the compiler `stderr` feeds back.
-2. **STL export** — must produce a non-empty STL. Catches mixed 2D/3D and
+1. **Compile**: OpenSCAD must render a preview; the compiler `stderr` feeds back.
+2. **STL export**: must produce a non-empty STL. Catches mixed 2D/3D and
    non-manifold geometry that previews fine but won't export.
-3. **Visual inspector** *(optional, `--inspect`)* — a local VLM judges the part
+3. **Visual inspector** *(optional, `--inspect`)*: a local VLM judges the part
    against the request and rejects valid-but-*wrong* shapes (a round disc when a
    hexagon was asked for) that the first two gates can't see. It inspects an
-   **orthographic contact sheet** — top, front and side views composited into one
+   **orthographic contact sheet**: top, front and side views composited into one
    labelled image (like an engineering drawing). This matters: a small VLM misreads
    a foreshortened isometric, and gets *confused* by several separate images, but
-   reads one labelled multi-panel sheet reliably — enough to catch a missing
+   reads one labelled multi-panel sheet reliably, enough to catch a missing
    perpendicular leg or a wrong cross-section. (Contact sheets need Pillow:
    `pip install textcad[inspect]`.)
 
@@ -131,7 +131,7 @@ print(result["stl"], result["attempts"])
 ```
 
 Every layer takes an injectable backend (`llm=`, `inspector=`), so the loop is
-unit-tested with no Ollama and no OpenSCAD — see `tests/`.
+unit-tested with no Ollama and no OpenSCAD. See `tests/`.
 
 ## Layout
 
@@ -149,7 +149,7 @@ tests/            mock-backed gate-logic + codegen + inspector tests
 
 ## What works, what doesn't (honest findings)
 
-- The closed loop is **verified end-to-end and fully local** — single-feature parts
+- The closed loop is **verified end-to-end and fully local**: single-feature parts
   (hex nut, washer, standoff, cube+bore) and now a **multi-feature L-bracket** (two
   perpendicular legs, a bolt hole through each leg's flat face).
 - **Multi-feature generation needed prompt engineering + a helper, not a bigger
@@ -160,7 +160,7 @@ tests/            mock-backed gate-logic + codegen + inspector tests
   1. **corner-based placement** rule + a worked L-bracket example → reliable gross
      shape (a real L, not a plus);
   2. a **`plan-in-comments`** step so the model reasons about coordinates first;
-  3. an **injected `thru_hole(pos, axis, d)` helper** prepended to every file — the
+  3. an **injected `thru_hole(pos, axis, d)` helper** prepended to every file: the
      model calls it and only chooses the axis (the plate's thin dimension) and a
      centred position, so it can't get the error-prone `rotate`/length/`center`
      mechanics wrong. This took the both-holes-correct rate from ~1/3 to ~2/3.
@@ -170,7 +170,7 @@ tests/            mock-backed gate-logic + codegen + inspector tests
   correctly approves a real L-bracket and rejects a flat L-plate from one labelled
   contact sheet.
 - A *larger* VLM (`qwen2.5vl:32b`) is **unsupported on the current Ollama (0.30.10
-  is the latest; it fails to load that model's vision encoder)** — but the
+  is the latest; it fails to load that model's vision encoder)**, but the
   contact-sheet trick made the small 7B sufficient, so it isn't required.
 
 Still-open edge: the coder's last weak spot is *which* axis the upright-plate hole
@@ -180,7 +180,7 @@ parameter-slider UI over the named OpenSCAD vars.
 
 ## License & provenance
 
-MIT — see [LICENSE](LICENSE). textcad is a **clean-room** project: it reproduces a
+MIT: see [LICENSE](LICENSE). textcad is a **clean-room** project: it reproduces a
 general *pattern* (LLM writes CAD code → render → inspect → iterate) but contains no
 third-party source. The OpenSCAD binary is invoked as an external tool, so textcad
 is an independent work and inherits **no GPL obligations**.
