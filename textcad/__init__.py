@@ -1,6 +1,6 @@
-"""textcad — natural-language → OpenSCAD parametric CAD via a local agentic loop.
+"""textcad: natural-language to OpenSCAD parametric CAD via an agentic loop.
 
-A clean-room, fully-local pipeline: a local LLM writes parametric OpenSCAD from a
+By default a local model (through Ollama) writes parametric OpenSCAD from a
 plain-English part description; OpenSCAD (invoked as a tool) renders and exports it;
 compile, STL-export, and local vision-model gates feed failures back for repair.
 """

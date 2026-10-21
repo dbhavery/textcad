@@ -1,5 +1,6 @@
 """Codegen backends. The default is local Ollama; optionally a frontier model can
-generate the OpenSCAD via a subscription CLI (Claude Code or Codex) — no API key.
+generate the OpenSCAD via a subscription CLI (Claude Code or Codex). Those send the request to
+Anthropic or OpenAI; textcad itself reads no API key.
 
 Frontier models place multi-feature geometry (e.g. a bolt hole through each leg of
 an L-bracket, on the correct axis) correctly zero-shot, where the small local coder
@@ -22,7 +23,7 @@ from .llm import ollama_generate
 def _run_cli(argv: list[str], timeout: int) -> str:
     exe = shutil.which(argv[0])
     if not exe:
-        raise RuntimeError(f"{argv[0]!r} not found on PATH — is it installed and logged in?")
+        raise RuntimeError(f"{argv[0]!r} not found on PATH. Is it installed and logged in?")
     with tempfile.TemporaryDirectory() as neutral:  # avoid project-context leakage
         proc = subprocess.run([exe, *argv[1:]], cwd=neutral, stdin=subprocess.DEVNULL,
                               capture_output=True, text=True, timeout=timeout)
