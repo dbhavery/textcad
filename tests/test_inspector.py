@@ -1,4 +1,4 @@
-"""Inspector tests — the Ollama vision call is monkeypatched."""
+"""Inspector tests: the Ollama vision call is monkeypatched."""
 import textcad.inspector as inspector_mod
 from textcad.inspector import make_vlm_inspector
 
@@ -19,19 +19,28 @@ def test_parses_rejection_json(monkeypatch):
     assert "round" in crit
 
 
-def test_fails_open_on_error(monkeypatch):
+def test_error_is_reported_as_not_checked(monkeypatch):
     def boom(*a, **k):
         raise RuntimeError("ollama down")
     monkeypatch.setattr(inspector_mod, "ollama_vision", boom)
     approved, crit = make_vlm_inspector()("img.png", "a hex nut")
-    assert approved is True  # fail-open: never block the pipeline
-    assert crit == ""
+    assert approved is None  # not checked: never reported as a pass
+    assert "did not run" in crit
+    assert "ollama down" in crit
 
 
-def test_malformed_json_fails_open(monkeypatch):
+def test_malformed_json_is_reported_as_not_checked(monkeypatch):
     monkeypatch.setattr(inspector_mod, "ollama_vision", lambda *a, **k: "not json at all")
     approved, crit = make_vlm_inspector()("img.png", "a hex nut")
-    assert approved is True
+    assert approved is None
+    assert "did not run" in crit
+
+
+def test_reply_without_approved_field_is_not_checked(monkeypatch):
+    monkeypatch.setattr(inspector_mod, "ollama_vision", lambda *a, **k: '{"critique": "hmm"}')
+    approved, crit = make_vlm_inspector()("img.png", "a hex nut")
+    assert approved is None
+    assert "did not run" in crit
 
 
 def test_multiview_passes_all_images_and_labels(monkeypatch):

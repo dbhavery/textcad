@@ -1,4 +1,4 @@
-"""Loop gate-logic tests — OpenSCAD and Ollama are fully monkeypatched, so these
+"""Loop gate-logic tests: OpenSCAD and Ollama are fully monkeypatched, so these
 run in CI with no binaries and no GPU."""
 import textcad.loop as loop
 from textcad.loop import run
@@ -57,6 +57,29 @@ def test_inspector_rejects_then_approves(monkeypatch, tmp_path):
     assert res["attempts"] == 2
     assert res["history"][0]["approved"] is False
     assert res["history"][1]["approved"] is True
+
+
+def test_errored_vision_check_is_not_reported_as_passed(monkeypatch, tmp_path):
+    """A vision model that errors must not count as a pass. The part is accepted on
+    the compile and STL-export gates only, and the result says the vision check
+    did not run."""
+    inspector = lambda img, desc: (None, "vision check did not run: ollama down")
+    _patch(monkeypatch, render=lambda o, s, p: (True, ""), export=lambda o, s, p: (True, ""))
+    res = run("a hex nut", name="t", iters=3, inspector=inspector, out_dir=tmp_path)
+    assert res["attempts"] == 1
+    assert res["stl"] and "error" not in res
+    assert res["vision_check"] == "not run"
+    assert res["history"][0]["approved"] is None
+    assert "ollama down" in res["history"][0]["feedback"]
+
+
+def test_vision_check_status_when_passed_and_when_off(monkeypatch, tmp_path):
+    _patch(monkeypatch, render=lambda o, s, p: (True, ""), export=lambda o, s, p: (True, ""))
+    passed = run("a cube", name="a", iters=1, inspector=lambda i, d: (True, ""),
+                 out_dir=tmp_path)
+    assert passed["vision_check"] == "passed"
+    off = run("a cube", name="b", iters=1, out_dir=tmp_path)
+    assert off["vision_check"] == "off"
 
 
 def test_no_convergence_within_budget(monkeypatch, tmp_path):
