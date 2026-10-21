@@ -37,9 +37,12 @@ def main(argv: list[str] | None = None) -> None:
                  inspector=inspector, out_dir=args.out, llm=llm)
 
     print("\n=== RESULT ===")
-    for k in ("description", "attempts", "scad", "png", "stl", "error"):
+    for k in ("description", "attempts", "scad", "png", "stl", "vision_check", "error"):
         if result.get(k) not in (None, ""):
             print(f"{k:12}: {result[k]}")
+    if result.get("vision_check") == "not run":
+        print("NOTE        : the vision check did not run; this part passed the compile "
+              "and STL-export checks only.")
 
 
 if __name__ == "__main__":

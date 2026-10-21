@@ -15,12 +15,18 @@ def run(description: str, *, name: str = "part", model: str = "qwen2.5-coder:32b
 
     Each iteration runs three gates; a failure at any gate feeds specific text back
     to the next generation:
-      1. compile     — OpenSCAD must render a preview (stderr feeds back)
-      2. STL export  — must produce a non-empty STL (mixed-2D/3D / non-manifold feeds back)
-      3. inspector   — optional (image, description) -> (approved, critique);
+      1. compile     - OpenSCAD must render a preview (stderr feeds back)
+      2. STL export  - must produce a non-empty STL (mixed-2D/3D / non-manifold feeds back)
+      3. inspector   - optional (image, description) -> (approved, critique);
                        a failing visual critique feeds back
 
-    Returns a dict with paths (scad/png/stl), attempt count, and per-attempt history.
+    The inspector's `approved` may be True, False, or None. None means the vision
+    check did not run (for example the vision model errored). That is not a pass:
+    the part is accepted on the compile and STL-export gates only, and the result's
+    "vision_check" field says "not run".
+
+    Returns a dict with paths (scad/png/stl), attempt count, per-attempt history and
+    "vision_check": "passed", "not run", or "off" (no inspector given).
     With no inspector, the first compile-and-exportable part wins.
     """
     out = Path(out_dir)
@@ -50,14 +56,14 @@ def run(description: str, *, name: str = "part", model: str = "qwen2.5-coder:32b
 
         stl_ok, stl_err = export_stl(openscad, scad, stl)
         if not stl_ok:
-            error = ("The code rendered a preview but STL export FAILED — this usually "
+            error = ("The code rendered a preview but STL export FAILED. This usually "
                      "means the geometry mixes 2D and 3D objects (e.g. a bare polygon()/"
                      "circle() not wrapped in linear_extrude alongside 3D solids), or the "
                      "result is empty/non-manifold. Make the whole model a single 3D solid. "
                      f"Exporter said: {stl_err}")
             history.append({"attempt": attempt, "compiled": True, "stl": False,
                             "feedback": error[:200]})
-            print(f"[attempt {attempt}] compiled=True but STL export FAILED — feeding back")
+            print(f"[attempt {attempt}] compiled=True but STL export FAILED, feeding back")
             continue
 
         if inspector is not None:
@@ -68,19 +74,32 @@ def run(description: str, *, name: str = "part", model: str = "qwen2.5-coder:32b
             else:
                 viewset = views or [("iso", png)]  # Pillow missing / no views: fall back
             approved, crit = inspector(viewset, description)
+            crit = crit or ""
             history.append({"attempt": attempt, "compiled": True, "stl": True,
-                            "approved": approved, "feedback": "" if approved else crit[:200]})
-            print(f"[attempt {attempt}] compiled=True stl=True  inspector_approved={approved}"
-                  + ("" if approved else f"  critique={crit[:120]!r}"))
-            if not approved:
+                            "approved": approved,
+                            "feedback": "" if approved is True else crit[:200]})
+            if approved is None:
+                # The vision check did not run. Accept on compile + export only and
+                # say so; retrying codegen would not fix a vision-model failure.
+                vision_check = "not run"
+                print(f"[attempt {attempt}] compiled=True stl=True  VISION CHECK DID NOT RUN"
+                      f" ({crit[:120]!r}); accepting on compile + STL export only")
+            elif approved:
+                vision_check = "passed"
+                print(f"[attempt {attempt}] compiled=True stl=True  inspector_approved=True")
+            else:
+                print(f"[attempt {attempt}] compiled=True stl=True  inspector_approved=False"
+                      f"  critique={crit[:120]!r}")
                 critique = crit
                 continue
         else:
+            vision_check = "off"
             history.append({"attempt": attempt, "compiled": True, "stl": True, "approved": None})
-            print(f"[attempt {attempt}] compiled=True stl=True (no inspector — accepting)")
+            print(f"[attempt {attempt}] compiled=True stl=True (no inspector, accepting)")
 
         return {"openscad": openscad, "description": description, "scad": str(scad),
-                "png": str(png), "stl": str(stl), "attempts": attempt, "history": history}
+                "png": str(png), "stl": str(stl), "attempts": attempt, "history": history,
+                "vision_check": vision_check}
 
     return {"openscad": openscad, "description": description, "scad": str(scad),
             "png": str(png), "stl": None, "attempts": iters, "history": history,
